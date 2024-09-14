@@ -1,0 +1,23 @@
+api_info:
+  public_api_listen: :8088
+
+database:
+  host: postgres
+  port: 5432
+  user: postgres
+  schema: public
+  password: postgres
+  database: go_wal_sample
+  sslmode: require
+  max_idle_conns: 5
+  max_active_conns: 100
+  max_conn_timeout: 10m
+  debug_log: true
+
+kafka:
+  broker_list:
+    - kafka1:9092
+    - kafka2:9092
+  partition: 1
+  partitioner: "hash"
+  wal_database_group_id: "go-wal.database_change"

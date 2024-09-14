@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: go_wal_backend
+    ports:
+      - "8088:8088"
+    depends_on:
+      - postgres
+      - kafka1
+      - kafka2
+      - elasticsearch
+    command:
+      - /bin/sh
+      - -c
+      - |
+        /app/main public-api
+  wal_capture:
+    image: go-wal-postgres-backend
+    container_name: go_wal_capture
+    depends_on:
+      - postgres
+      - kafka1
+      - kafka2
+    command:
+      - /bin/sh
+      - -c
+      - |
+        sleep 10
+        /app/main wal_capture
+    networks:
+      - go-wal-network
+
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    container_name: go_wal_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: go_wal_sample
+    command: postgres -c wal_level=logical -c max_connections=200
+    networks:
+      - go-wal-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.2.1
+    container_name: go_wal_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - go-wal-network
+
+  kafka1:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka1
+    ports:
+      - "8097:8097"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:8097,INTERNAL://kafka1:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    networks:
+      - go-wal-network
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.2.1
+    container_name: kafka2
+    ports:
+      - "8098:8098"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:8098,INTERNAL://kafka2:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    networks:
+      - go-wal-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kafka_local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: PLAINTEXT://kafka1:9092,PLAINTEXT://kafka2:9092
+    networks:
+      - go-wal-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_USERNAME=go-wal-usr
+      - ELASTIC_PASSWORD=go_wal_pwd
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - go-wal-network
+
+networks:
+  go-wal-network:
+    external: true
+    name: go-wal-network
